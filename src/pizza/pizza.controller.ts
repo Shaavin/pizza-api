@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Delete,
   Get,
@@ -6,9 +7,16 @@ import {
   HttpStatus,
   Param,
   Post,
+  UsePipes,
+  ValidationPipe,
 } from '@nestjs/common';
 import { PizzaService } from './pizza.service';
-import { Ingredient } from '@prisma/client';
+import {
+  Ingredient,
+  IngredientAmount,
+  IngredientSection,
+} from '@prisma/client';
+import { CreatePizzaDto, PizzaIngredientDto } from './pizza.types';
 
 @Controller('pizza')
 export class PizzaController {
@@ -36,6 +44,17 @@ export class PizzaController {
     await this.pizzaService.addTopping(name.toLowerCase());
   }
 
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  @UsePipes(new ValidationPipe({ transform: true }))
+  async createPizza(@Body() createPizzaDto: CreatePizzaDto) {
+    return await this.pizzaService.createPizza(
+      createPizzaDto.size,
+      createPizzaDto.sauces.map(formatNewPizzaIngredientWithDefaults),
+      createPizzaDto.toppings.map(formatNewPizzaIngredientWithDefaults),
+    );
+  }
+
   @Delete('sauce/:name')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteSauce(@Param('name') name: string) {
@@ -47,4 +66,27 @@ export class PizzaController {
   async deleteTopping(@Param('name') name: string) {
     await this.pizzaService.deleteTopping(name.toLowerCase());
   }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deletePizza(@Param('id') id: string) {
+    await this.pizzaService.deletePizza(id);
+  }
+}
+
+/**
+ * Performs some name formatting & supplies defaults to pizza ingredients.
+ * @param {Partial<PizzaIngredientDto> & { name: string }} ingredient The
+ *  ingredient to format.
+ * @returns {PizzaIngredientDto} The formatted pizza ingredient.
+ */
+function formatNewPizzaIngredientWithDefaults(
+  ingredient: Partial<PizzaIngredientDto> & { name: string },
+): PizzaIngredientDto {
+  return {
+    ...ingredient,
+    name: ingredient.name.toLowerCase(),
+    amount: ingredient.amount ? ingredient.amount : IngredientAmount.REGULAR,
+    section: ingredient.section ? ingredient.section : IngredientSection.WHOLE,
+  };
 }
