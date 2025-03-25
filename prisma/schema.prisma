@@ -12,3 +12,63 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+enum PizzaSize {
+  PERSONAL
+  SMALL
+  MEDIUM
+  LARGE
+  XLARGE
+}
+
+enum IngredientAmount {
+  LIGHT
+  REGULAR
+  EXTRA
+}
+
+enum IngredientSection {
+  LEFT
+  RIGHT
+  WHOLE
+}
+
+enum IngredientType {
+  SAUCE
+  TOPPING
+}
+
+model Ingredient {
+  id   String         @id @default(uuid())
+  name String         @unique
+  type IngredientType
+
+  // Allow ingredient to be deleted, but maintain history for previous pizzas that used it
+  deletedAt DateTime?
+
+  pizzaIngredients PizzaIngredient[]
+}
+
+model Pizza {
+  id   String @id @default(uuid())
+  size PizzaSize
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime? @updatedAt
+
+  pizzaIngredients PizzaIngredient[]
+}
+
+model PizzaIngredient {
+  id           String            @id @default(uuid())
+  amount       IngredientAmount  @default(REGULAR)
+  section      IngredientSection @default(WHOLE)
+  pizzaId      String
+  ingredientId String
+
+  pizza      Pizza      @relation(fields: [pizzaId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id])
+
+  // Any particular ingredient can only be specified once per section of a pizza
+  @@unique([pizzaId, ingredientId, section])
+}
