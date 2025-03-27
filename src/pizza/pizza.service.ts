@@ -33,25 +33,47 @@ export class PizzaService {
   }
 
   /**
-   * Inserts a new sauce choice.
+   * Inserts a new sauce choice, or clears the deletion status of a
+   * previously deleted one.
    * @param {string} name The type of sauce to add.
    */
   async addSauce(name: string) {
-    await this.throwIfMatchingIngredient(name, IngredientType.SAUCE);
-    await this.prisma.ingredient.create({
-      data: { name, type: IngredientType.SAUCE },
-    });
+    const wasSoftDeleted = await this.checkDeletedOrThrowIfDuplicate(
+      name,
+      IngredientType.SAUCE,
+    );
+    if (wasSoftDeleted) {
+      await this.prisma.ingredient.update({
+        where: { name },
+        data: { deletedAt: null },
+      });
+    } else {
+      await this.prisma.ingredient.create({
+        data: { name, type: IngredientType.SAUCE },
+      });
+    }
   }
 
   /**
-   * Inserts a new topping choice.
+   * Inserts a new topping choice, or clears the deletion status of a
+   * previously deleted one.
    * @param {string} name The type of topping to add.
    */
   async addTopping(name: string) {
-    await this.throwIfMatchingIngredient(name, IngredientType.TOPPING);
-    await this.prisma.ingredient.create({
-      data: { name, type: IngredientType.TOPPING },
-    });
+    const wasSoftDeleted = await this.checkDeletedOrThrowIfDuplicate(
+      name,
+      IngredientType.TOPPING,
+    );
+    if (wasSoftDeleted) {
+      await this.prisma.ingredient.update({
+        where: { name },
+        data: { deletedAt: null },
+      });
+    } else {
+      await this.prisma.ingredient.create({
+        data: { name, type: IngredientType.TOPPING },
+      });
+    }
   }
 
   async createPizza(
@@ -146,21 +168,28 @@ export class PizzaService {
   }
 
   /**
-   * Checks if an ingredient with `name` and `type` already exists. If a match is found,
-   * this will throw an error with a 400 status code.
+   * Checks if an ingredient was soft deleted.
    * @param {string} name The name of the ingredient.
-   * @param {IngredientType} type The type of the ingredient.
-   * @throws If a matching ingredient is found.
+   * @param {IngredientType} type The type of ingredient.
+   * @returns {Promise<boolean>} Whether the ingredient was soft deleted.
+   * @throws If a duplicate, non-soft deleted ingredient is provided.
    */
-  private async throwIfMatchingIngredient(name: string, type: IngredientType) {
+  private async checkDeletedOrThrowIfDuplicate(
+    name: string,
+    type: IngredientType,
+  ): Promise<boolean> {
     const match = await this.prisma.ingredient.findUnique({
-      where: { name, deletedAt: null, type },
+      where: { name, type },
     });
-    if (match) {
+    if (match && match.deletedAt) {
+      return true;
+    } else if (match) {
       throw new HttpException(
-        `Failed to add ${type.toLowerCase()} ${name} since it already exists`,
+        `Failed to create duplicate ${type.toLowerCase()} ${name}`,
         HttpStatus.BAD_REQUEST,
       );
+    } else {
+      return false;
     }
   }
 
@@ -215,7 +244,7 @@ export class PizzaService {
    * Ensures all ingredients exist, and if so, returns a map from that ingredient's name to its ID.
    * @param {PizzaIngredientDto[]} ingredients The ingredients to match and create an ID map for.
    * @param {IngredientType} ingredientType The type of the ingredients.
-   * @returns {Promise<Map<string, strin>>} A map from ingredient names to their IDs.
+   * @returns {Promise<Map<string, string>>} A map from ingredient names to their IDs.
    * @throws If an ingredient does not exist of the provided ingredient type.
    */
   private async createIngredientMapOrThrow(
